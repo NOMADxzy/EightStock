@@ -295,6 +295,7 @@ sendq和recvq 的结构为等待队列类型，sudog是对goroutine的一种封�
     如果循环数组的buf未满，那么将数据发送到循环数组的队尾
     如果循环数组的buf已满，将当前的goroutine加入写等待对列，并挂起等待唤醒接收
 ## 读数据
+	buf -> 写等待队列 -> 排队
 如果channel的写等待队列存在发送者goroutine
     如果是无缓冲channel，直接从第一个发送者goroutine那里把数据拷贝给接收变量，唤醒发送的gorontine
     如果是有缓冲channel(已满),将循环数组buf的队首元素拷贝给接受变量，将第一个发送者goroutine的数据拷贝到循环数组队尾，唤醒发送端goroutine
@@ -516,6 +517,85 @@ func main() {
 
 区别：使用值接受者实现接口，结构体类型和结构体指针类型的变量都能存，指针接收者实现接口只能存指针类型的变量
 
+#### 字符串
+
+go中的string类型采用UTF-8编码，这是一种可变长的 Unicode 字符编码方案，几乎可以表示世界任何字符。
+
+##### string、rune、byte
+
+- rune对应于int32，也就是这个unicode码点，几乎在所有方面等同于int32
+- byte对应于原始字节（8位所以0~255），也就是原始字节
+
+![image-20240428131739289](https://gitee.com/xu_zuyun/picgo/raw/master/img/image-20240428131739289.png)
+
+```go
+a := "Go语言"
+
+fmt.Println("字节数：", len(a))
+//utf8计算unicode字符数
+fmt.Println("Unicode字符数：", utf8.RuneCountInString(a))
+fmt.Println("[]Rune：", len([]rune(a)))
+
+// 遍历字符串中的字符 char为rune类型
+fmt.Println("遍历字符串中的字符：")
+for _, char := range a {
+  //测试当前rune类型
+  fmt.Printf("%T %c\n", char, char)
+}
+fmt.Println()
+
+输出结果：
+字节数： 8
+Unicode字符数： 4
+[]Rune： 4
+遍历字符串中的字符：
+int32 G
+int32 o
+int32 语
+int32 言
+```
+
+##### for range 字符串
+
+- 从string中得到所有的rune字符，它能够自动根据 UTF-8 规则识别 Unicode 编码的字符。
+- 每个 rune 字符和索引在 for range 循环中是一一对应的。
+
+```go
+package main
+import (
+	"fmt"
+)
+func main() {
+	var str = "hello 你好"
+	for key, value := range str {
+		fmt.Printf("key:%d value:0x%x\n", key, value)
+	}
+}
+```
+
+![1.png](https://img.php.cn/upload/image/590/535/397/1673596126274551.png)
+
+##### strings.Map()
+
+对一个 字符串 中的每一个 字符 都做相对应的处理
+
+```go
+package main
+import (
+	"fmt"
+	"strings"
+)
+func strEncry(r rune)rune{
+	return r+1
+}
+func main() {
+	//使用 strings.Map() 函数，实现将一个字符串中的每一个字符都后移一位
+	strHaiCoder := "HaiCoder"
+	mapStr := strings.Map(strEncry, strHaiCoder)
+	fmt.Println("mapStr =", mapStr)
+}
+```
+
 #### 异常
 
 1. 编译时异常：在编译时抛出的异常，编译不通过，语法使用错误，符号填写错误等等。。。
@@ -625,8 +705,9 @@ p默认cpu内核数，M与P的数量没有绝对关系，一个M阻塞，P就会
 **步骤 4：**M 获取 G，M首先从P的本地队列获取 G，如果 P为空，则从全局队列获取 G，如果全局队列也为空，则从另一个本地队列偷取一半数量的 G（负载均衡）。
 **步骤 5：**M 调度和执行 G，M调用 G.func() 函数执行 G，分下面两种情况：
 
-- 如果 M在执行 G 的过程发生系统调用阻塞（同步），会阻塞G和M（操作系统限制），此时P会和当前M解绑，并寻找新的M，如果没有空闲的M就会新建一个M ，接管正在阻塞G所属的P，接着继续执行 P中其余的G；当系统调用结束后，这个G会尝试获取一个空闲的P执行，优先获取之前绑定的P，并放入到这个P的本地队列，如果获取不到P，那么这个线程M变成休眠状态，加入到空闲线程中，然后这个G会被放入到全局队列中。
-- 如果M在执行G的过程发生网络IO等操作阻塞时（异步），阻塞G，不会阻塞M。M会寻找P中其它可执行的G继续执行，G会被网络轮询器network poller 接手，当阻塞的G恢复后，G1从network poller 被移回到P的 LRQ 中，重新进入可执行状态。
+- 如果 M在执行 G 的过程发生系统调用阻塞（同步），会阻塞G和M（操作系统限制），此时`P会和当前M解绑`，并寻找新的M，如果`没有空闲的M就会新建一个M` ，接管正在阻塞G所属的P，接着继续执行 P中其余的G；当系统调用结束后，这个G会尝试获取一个空闲的P执行，优先获取之前绑定的P，并放入到这个P的本地队列，如果获取不到P，那么这个线程M变成休眠状态，加入到空闲线程中，然后这个G会被放入到全局队列中。
+- 如果M在执行G的过程发生网络IO等操作阻塞时（异步），阻塞G，`G主动让出M`，不会阻塞M。M会寻找P中其它可执行的G继续执行，G会被`网络轮询器network poller `接手，当阻塞的G恢复后，G1从network poller 被`移回到P的 LRQ `中，重新进入可执行状态。
+- 理论上，在正常的运行过程中，每个 P 都会关联一个 M 来执行 G。
 
 ```markdown
 ## 核心思想：
@@ -636,10 +717,9 @@ p默认cpu内核数，M与P的数量没有绝对关系，一个M阻塞，P就会
 当本线程因为G进行系统调用阻塞时，线程释放绑定的P，把P转移给其他空闲的线程执行。
 ```
 
-```
+```markdown
 ⚠️注意：
-- go的协程是非抢占式的，由协程主动交出控制权，也就是说，上面在发生IO操作时，并不是调度器强制切换执行其他的协程，- 而是当前协程交出了控制权，调度器才去执行其他协程。
-- 协程的切换时间片是10ms，也就是说 goroutine 最多执行10ms就会被 M 切换到下一个 G。
+go的协程是`非抢占式的`，由协程主动交出控制权，也就是说，上面在发生IO操作时，并不是调度器强制切换执行其他的协程，- 而是当前协程交出了控制权，调度器才去执行其他协程。
 ```
 
 ```markdown
@@ -650,7 +730,115 @@ p默认cpu内核数，M与P的数量没有绝对关系，一个M阻塞，P就会
 主要还是因为M其实是内核线程，内核只知道自己在跑线程，而golang的运行时（包括调度，垃圾回收等）其实都是用户空间里的逻辑。
 
 3. gmp当一个g堵塞时，g、m、p会发生什么?
-M 会阻塞，如果当前有 G 在执行，调度器会将 MP 进行分离，如果有空闲的M就用或者是从线程池中取，如果都没有就创建一个新的M 来服务于这个 P，当M进行系统调用结束的时候，这个G会尝试获取一个空闲的 P 执行，并放入到这个 P 的本地队列。如果获取不到 P，那么这个线程 M 变成休眠状态， 加入到空闲线程中，然后这个 G 会被放入全局队列中。
+M 会阻塞，如果当前有 G 在执行，调度器会将 MP 进行分离，如果有空闲的M就用或者是从线程池中取，如果都没有就创建一个新的M 来服务于这个 P，当M进行系统调用结束的时候，这个G会尝试获取一个空闲的 P 执行，并放入到这个 P 的本地队列。如果获取不到 P，那么这个`线程 M 变成休眠状态`， 加入到空闲线程中，然后这个 `G 会被放入全局队列`中。
+```
+
+##### 协程之间的通信方式
+
+- 1、通道（Channels）
+
+  ```go
+  ch := make(chan int) // 创建一个无缓冲的通道
+  
+  // 发送者 goroutine
+  go func() {
+      ch <- 42 // 发送值到通道
+  }()
+  
+  // 接收者 goroutine
+  go func() {
+      value := <-ch // 从通道接收值
+      fmt.Println(value)
+  }()
+  ```
+
+- 2、同步原语（Mutex、WaitGroup）
+
+  ```go
+  var mutex sync.Mutex
+  var sharedResource map[string]int
+  
+  // 在访问共享资源前加锁
+  mutex.Lock()
+  sharedResource["key"] = 42
+  mutex.Unlock()
+  
+  // 其他 goroutines 将等待锁释放才能访问 sharedResource
+  ```
+
+- 3、原子操作
+
+  ```go
+  var count int32
+  
+  // 原子地增加 count 的值
+  atomic.AddInt32(&count, 1)
+  
+  // 原子地读取 count 的值
+  value := atomic.LoadInt32(&count)
+  ```
+
+- 4、context语句
+
+  ```go
+  ctx, cancel := context.WithCancel(context.Background())
+  
+  // 工作 goroutine
+  go func() {
+      for {
+          select {
+          case <-ctx.Done():
+              return
+          default:
+              // 执行工作...
+          }
+      }
+  }()
+  
+  // 当需要停止 goroutine 时
+  cancel()
+  ```
+
+##### WaitGroup
+
+底层原理：
+
+- **计数器（counter）**：`sync.WaitGroup` 内部维护了一个计数器，用于跟踪要等待的 Goroutine 的数量。当这个计数器的值为 0 时，`Wait()` 方法将不再阻塞。
+- **互斥锁（mutex）**：用于保护计数器的读写操作。在调用 `Add()`、`Done()` 或 `Wait()` 方法时，会涉及对计数器的修改，互斥锁确保了这些操作的原子性，防止多个 Goroutine 并发修改计数器时出现竞态条件。
+- **条件变量（condition variable）**：用于在计数器不为 0 时阻塞 Goroutine，并在计数器为 0 时唤醒它们。条件变量允许 Goroutine 在等待某个条件为真时进入休眠状态，并在条件变为真时唤醒它们。
+
+`sync.WaitGroup` 的 `Add()` 方法用于增加计数器的值，`Done()` 方法用于减少计数器的值，而 `Wait()` 方法会阻塞当前 Goroutine，直到计数器的值变为 0。
+
+```go
+type WaitGroup struct {
+    counter int32
+    mutex   sync.Mutex
+    cond    sync.Cond
+}
+
+func (wg *WaitGroup) Add(delta int) {
+    wg.mutex.Lock()
+    defer wg.mutex.Unlock()
+    wg.counter += delta
+    if wg.counter < 0 {
+        panic("sync: negative WaitGroup counter")
+    }
+    if wg.counter == 0 {
+        wg.cond.Broadcast()
+    }
+}
+
+func (wg *WaitGroup) Done() {
+    wg.Add(-1)
+}
+
+func (wg *WaitGroup) Wait() {
+    wg.mutex.Lock()
+    defer wg.mutex.Unlock()
+    for wg.counter > 0 {
+        wg.cond.Wait()
+    }
+}
 ```
 
 #### 动态获取信息——反射
@@ -825,6 +1013,8 @@ func main() {
 
 #### 互斥锁——Mutex
 
+##### 两种模式
+
 ```
 根据不同的情况自动切换到不同的模式以保持性能和公平性之间的平衡
 ```
@@ -849,6 +1039,33 @@ func main() {
 - 释放锁的顺序：如果您需要按顺序获取多个锁，请始终按同一顺序释放它们，以避免死锁。
 - 限制锁的范围：尽可能减小锁的范围，只保护必要的代码区域。
 - 使用 defer：在函数开始处使用 defer mu.Unlock() 可以确保即使存在 panic 或早期返回，互斥锁也会被释放。
+```
+
+##### 两种类型
+
+互斥锁：任何时候只能有一个goroutine持有这种锁
+
+```go
+var mu sync.Mutex
+mu.Lock()   // 获取锁
+// 临界区代码：只有一个goroutine可以执行此处代码
+mu.Unlock() // 释放锁
+```
+
+读写锁：
+
+- **读锁（RLock）：** 当一个goroutine获得读锁后，其他goroutine仍然可以获取读锁，但不能获取写锁。读锁之间是非排他的。
+- **写锁（Lock）：** 获取写锁时，其他goroutine不得获取读锁或写锁。写锁是完全排他的。
+
+```go
+var rwMu sync.RWMutex
+rwMu.RLock()   // 获取读锁
+// 可以同时有多个goroutine执行读取操作
+rwMu.RUnlock() // 释放读锁
+
+rwMu.Lock()    // 获取写锁
+// 只有一个goroutine可以执行写入操作
+rwMu.Unlock()  // 释放写锁
 ```
 
 #### 垃圾回收
@@ -947,6 +1164,8 @@ func main() {
 
    在Go语言中，`copy`函数的行为可以被视作浅拷贝（shallow copy）。这意味着它只复制切片的元素值到目标切片，而不会递归地复制那些元素指向的对象。如果切片包含的是基本数据类型（如int、float等），这个操作表现得就像深拷贝；如果切片包含的是引用类型（如指针、切片、映射、通道或接口），`copy`函数仅复制引用，而不是它们指向的实际数据。这意味着新切片和原切片中对应的元素将指向同一个底层数据结构。
 
+   切片、Map实际上并不是指针。它们是复合类型，有自己的内部结构，但当你将它们作为函数参数传递时，它们的行为表现得好像通过引用传递一样
+
 9. golang中哪些类型不可以作为map的key？
 
    不可比较的类型都不可以作为key，会动态变化的类型都不可以作为键
@@ -1022,6 +1241,20 @@ func main() {
         	return false // 没有找到 key。
         }
         ```
+
+13. Golang结构体字段为什么要大写？
+
+    ```go
+    type MyStruct struct {
+        PublicField  string // 可以被其他包访问
+        privateField string // 只能在定义它的包内访问
+    }
+    ```
+
+1. **封装**：通过控制哪些字段是对外部包可见的，Go 语言提供了一种封装机制。你可以隐藏内部状态和实现细节，只暴露那些需要被外部访问的接口。
+2. **接口实现**：如果一个结构体需要实现某个接口，接口内定义的方法通常都是大写开头的，以确保它们是可导出的。因此，结构体本身也会有匹配的大写方法。
+3. **反射**：在使用反射（reflect）这个强大的特性时，只有可导出的字段才能被完全操作。比如，你可能想要遍历一个结构体的所有字段并读取或修改它们的值，如果字段不是大写开头，反射在处理时将受到限制。
+4. **JSON序列化与反序列化**：当使用标准库中的 `encoding/json` 包进行JSON序列化和反序列化时，只有可导出的字段会被处理。私有字段（小写开头）将不会被包含在JSON输出中，并且也不会被填充数据。
 
 ### 三、Gin框架
 

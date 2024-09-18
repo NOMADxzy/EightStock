@@ -135,15 +135,15 @@ mybatis 通过 xml或注解的方式将要执行的各种 statement 配置起来
 >    import org.apache.ibatis.session.SqlSession;
 >    import org.apache.ibatis.session.SqlSessionFactory;
 >    import org.apache.ibatis.session.SqlSessionFactoryBuilder;
->                         
+>                                                       
 >    import java.io.Reader;
->                         
+>                                                       
 >    public class MyApp {
 >        public static void main(String[] args) throws Exception {
 >            Reader reader = Resources.getResourceAsReader("mybatis-config.xml");
 >            SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(reader);
 >            SqlSession session = sqlSessionFactory.openSession();
->                         
+>                                                       
 >            try {
 >                UserMapper mapper = session.getMapper(UserMapper.class);
 >                User user = mapper.selectUser(1);
@@ -540,33 +540,45 @@ Netty是一款卓越的java框架，提供异步的、事件驱动的网络应�
 
 ![img](https://gitee.com/xu_zuyun/picgo/raw/master/img/v2-87775bf22ab7b07c63ea7edbf607a67a_1440w.webp)
 
-**Core 核心层**
+#### Core 核心层
+
 Core 核心层是 Netty 最精华的内容，它提供了底层网络通信的通用抽象和实现，包括可扩展的事件模型、通用的通信 API、支持零拷贝的 ByteBuf 等。
 
-**Protocol Support 协议支持层**
-协议支持层基本上覆盖了主流协议的编解码实现，如 HTTP、SSL、Protobuf、压缩、大文件传输、WebSocket、文本、二进制等主流协议，此外 Netty  还支持自定义应用层协议。Netty 丰富的协议支持降低了用户的开发成本，基于 Netty 我们可以快速开发 HTTP、WebSocket  等服务。
+##### ByteBuf
 
-**Transport Service 传输服务层**
-传输服务层提供了网络传输能力的定义和实现方法。它支持 Socket、HTTP 隧道、虚拟机管道等传输方式。Netty 对 TCP、UDP 等数据传输做了抽象和封装，用户可以更聚焦在业务逻辑实现上，而不必关系底层数据传输的细节。
+`ByteBuf` 是 Netty 中用来存储字节数据的主要数据结构，可以存在于 JVM 堆内存中，也可以配置为使用堆外（直接）内存以优化性能。特点：
 
-#### Netty事件循环
+- **读写索引**：ByteBuf 维护两个独立的指针，分别是读索引和写索引，分别记录读取和写入操作的位置。
+- **池化**：Netty 支持对 ByteBuf 的池化，这意味着可以重用 ByteBuf 实例减少内存分配的开销。
+- **零拷贝**：ByteBuf 提供了多种零拷贝操作，例如 slice、duplicate 和 compositeByteBuf 等。
 
-EventLoop （事件循环对象）本质是一个单线程执行器（同时维护了一个 Selector），里面有 run 方法处理 Channel 上源源不断的 io 事件。事件循环组EventLoopGroup 是一组 EventLoop，Channel 一般会调用 EventLoopGroup 的 register 方法来绑定其中一个 EventLoop，后续这个 Channel 上的 io 事件都由此 EventLoop 来处理（保证了 io 事件处理时的线程安全）
+##### 事件循环
 
-`EventLoopGroup` 用于管理 EventLoop ，包括将 EentLoop 分配给 Channel ，包括 EventLoop 的协同
+Netty 的事件模型是指在网络应用中，采用`异步事件驱动`的编程方式。在这个模型中，程序的执行流程主要由外部事件触发，而不是固定的顺序。这种模型的设计能够有效提高系统的并发性和性能。
 
-```java
-public class Test {
-    public static void main(String[] args) {
-        DefaultEventLoopGroup group = new DefaultEventLoopGroup(2);
-        System.out.println(group.next());
-        System.out.println(group.next());
-        System.out.println(group.next());
-    }
-}
+EventLoop：
+
+- 一个 Netty 应用通常会包含一个或多个 EventLoop，每个 EventLoop 都在自己的线程中运行。
+- EventLoop 内部维护了一个任务队列，它是一个双向链表。任务队列中存放着要执行的任务（例如，当一个 Channel 接收到数据时，EventLoop 会将读取数据的任务添加到任务队列中。）
+- EventLoop 在不断地轮询任务队列，从队列中取出任务并执行。由于 EventLoop 是单线程的，因此不需要担心线程安全的问题。
+
+Channel：在使用 Selector 之前，需要将 Channel 注册到 Selector 上，以便 Selector 监听该通道上的事件。注册了通道后，可以通过不断轮询的方式监听事件并进行处理。
+
+selector：Selector 的实现基于操作系统提供的多路复用机制，例如 Linux 中的 select、poll，以及更[高效的](https://so.csdn.net/so/search?q=高效的&spm=1001.2101.3001.7020) epoll。Netty 采用了事件通知的方式，通过操作系统提供的底层机制，在通道上发生事件时通知 EventLoop 进行处理。
+
+```
+Selector ——允许一个线程同时监听多个通道的事件，减少线程的开销，提高系统的并发处理
 ```
 
-![img](https://gitee.com/xu_zuyun/picgo/raw/master/img/3a509ba61d2a4acf96a2f2f0499d48ac.png)
+EventLoopGroup：`EventLoopGroup` 用于管理 EventLoop ，包括将 EentLoop 分配给 Channel ，包括 EventLoop 的协同
+
+#### Protocol Support 协议支持层
+
+协议支持层基本上覆盖了主流协议的编解码实现，如 HTTP、SSL、Protobuf、压缩、大文件传输、WebSocket、文本、二进制等主流协议，此外 Netty  还支持自定义应用层协议。Netty 丰富的协议支持降低了用户的开发成本，基于 Netty 我们可以快速开发 HTTP、WebSocket  等服务。
+
+#### Transport Service 传输服务层
+
+传输服务层提供了网络传输能力的定义和实现方法。它支持 Socket、HTTP 隧道、虚拟机管道等传输方式。Netty 对 TCP、UDP 等数据传输做了抽象和封装，用户可以更聚焦在业务逻辑实现上，而不必关系底层数据传输的细节。
 
 #### Netty处理任务
 
@@ -602,41 +614,95 @@ public class Test { //定时任务
 
 RabbitMQ是使用Erlang语言开发的开源消息队列系统，基于AMQP协议来实现。AMQP的主要特征是面向消息、队列、路由(包括点对点和发布/订阅)、可靠性、 安全。AMQP协议更多用在企业系统内，对数据一致性、稳定性和可靠性要求很高的场景，对性能和吞吐量的要求还在其次。
 
-![img](https://gitee.com/xu_zuyun/picgo/raw/master/img/a6efce1b9d16fdfa804ae061a962bc5895ee7b17.jpeg)
+![b9a62febc4d142e4b55c8721a1c08151](https://gitee.com/xu_zuyun/picgo/raw/master/img/b9a62febc4d142e4b55c8721a1c08151.png)
 
-1. #####  Producer (生产者)：生产者是发送消息的应用程序。它创建消息，并且将其发布到RabbitMQ中的交换器。
+1. 外部
 
-   ##### Consumer (消费者)：消费者是接收消息的应用程序。它通过订阅队列来等待和处理消息。
+   - #####  Producer (生产者)：生产者是发送消息的应用程序。它创建消息，并且将其发布到RabbitMQ中的交换器。
 
-2. Channel：网络信道，读写都是在Channel中进行（NIO的概念），包括对MQ进行的一些操作（例如clear queue等）都是在Channel中进行，客户端可建立多个Channel，每个Channel代表一个会话任务
+   - #####  Consumer (消费者)：消费者是接收消息的应用程序。它通过订阅队列来等待和处理消息。
+
+   - Channel：网络信道，读写都是在Channel中进行（NIO的概念），包括对MQ进行的一些操作（例如clear queue等）都是在Channel中进行，客户端可建立多个Channel，每个Channel代表一个会话任务
+
+2. 内部
 
    Message：由properties（有消息优先级、延迟等特性）和Body（消息内容）组成
 
-3. Exchange：交换器负责接收生产者发送的消息，并根据路由键（routing key）和绑定规则转发这些消息到相应的队列中。
+   Routing key：路由规则，在消息中
 
-4. Binding：是一个链接，它告诉交换器如何根据路由键、绑定键或头信息将消息路由到正确的队列。
+   
 
-   Routing key：路由规则
+   Queue：	
+
+   ​    **队列名称**：保存队列的名称，用于唯一标识不同的队列。
+
+   ​	**队列属性**：例如持久性、自动删除等配置选项。
+
+   ​	**绑定信息**：队列与交换器之间的绑定关系。
+
+   
+
+   Exchange：交换器负责接收生产者发送的消息，并根据消息的routing key和队列的绑定规则转发这些消息到相应的队列中。
+
+   
+
+   Binding：是一个链接，它告诉交换器如何根据路由键、绑定键或头信息将消息路由到正确的队列。
+
+   
+
+   VHost：RabbitMQ 通过虚拟主机来实现逻辑分组和资源隔离，一个虚拟主机就是一个小型的 RabbitMQ 服务器，拥有独立的队列、交换器和绑定关系。保证`业务之间的隔离性和数据安全`。
+
+交换器、队列 和 绑定健之间的关系：
+
+```python
+# 声明交换器
+channel.exchange_declare(exchange='logs_direct', exchange_type='direct')
+# 声明队列
+channel.queue_declare(queue='error_logs')
+channel.queue_declare(queue='info_logs')
+# 绑定队列到交换器
+channel.queue_bind(exchange='logs_direct', queue='error_logs', routing_key='error')
+channel.queue_bind(exchange='logs_direct', queue='info_logs', routing_key='info')
+```
 
 - 优点：
-  1. 解除业务系统之间的耦合，降低系统之间的依赖关系
-  2. 实现消息的异步处理，无需同步等待
-  3. 削峰填谷，将流量从高峰期引到低谷期进行处理
+  1. 解除业务系统之间的**耦合**，降低系统之间的依赖关系
+  2. 实现消息的**异步**处理，无需同步等待
+  3. **削峰填谷**，将流量从高峰期引到低谷期进行处理
 - 缺点：
-  1. 增加了系统的复杂度，带入了幂等、重复消费、消息丢失的问题
-  2. 系统的可用性比原先要低，MQ挂了以后，整个系统也会崩溃.
-  3. 消费端数据一致性问题
+  1. 系统的可用性比原先要低，MQ挂了以后，整个系统也会崩溃.
+  2. 消费端数据一致性问题
 - 使用场景
-  - 消息订阅
+  - 内容订阅
   - 日志采集
   - 埋点
   - 订单
 
-```
+```markdown
 基于消息的模型，关心的是“通知”，而非“处理”.
 在下单时库存系统不能正常使用。也不影响正常下单，因为下单后，订单系统写入消息队列就不再关心其他的后续操作了。实现订单系统与库存系统的应用解耦.
-为了保证库存肯定有，可以将队列大小设置成库存数量，或者采用其他方式解决。
+`为了保证库存肯定有，可以将队列大小设置成库存数量`
 ```
+
+#### 同步方式
+
+- 元数据信息在集群内部通过**Erlang分布式数据库**（Mnesia）存储和管理。当一个节点变更了这些配置或者元数据时，**变更会被自动同步**到所有其他节点。
+- 当新节点加入到集群或者已有节点恢复在线后，RabbitMQ会**同步队列的状态和元数据信息到该节点**。这使得节点能够迅速更新到集群当前的状态。
+
+#### 两种节点（Node）
+
+RabbitMQ中有两种节点类型：磁盘节点（disk nodes）和内存节点（ram nodes）。这些分类主要影响的是**元数据**而不是消息本身。
+
+- **磁盘节点**会定期将元数据从内存同步到磁盘。这些元数据包括队列的定义、交换器的定义、绑定以及用户权限等。由于这些信息被写入到磁盘，即使所有的节点都宕机，集群依然能够在重新启动后恢复到之前的状态。至少需要一个磁盘节点来保持集群的元数据，确保元数据的持久性和一致性。
+
+- **内存节点**不会把所有元数据写入磁盘，而是保留在内存中。这可以提供更快的读写性能，但是如果没有任何磁盘节点，并且所有内存节点同时失效的话，集群可能会丢失配置信息，因此内存节点不适合用于存储关键数据。内存节点通常用于提高集群的消息传递性能。
+
+  ```markdown
+  是否将消息保存到磁盘是由消息发送时的持久化设置决定的，而不是由节点类型决定。磁盘节点确保元数据能够被持久化存储，而对于消息的持久化，则需要发送者在发布消息时将其`标记为持久化`，并确保消息被路由到`持久化队列`中。
+  
+  如果将`非持久化消息发送到持久化队列`中，那么这些消息在服务器重启后仍然会丢失。
+  反之，如果将`持久化消息发送到非持久化队列`，那么队列将不会在服务器重启后恢复，而且其中的消息也会丢失，无论这些消息在重启前是否已经被写入磁盘。
+  ```
 
 #### 四种交换机(Exchange)
 
@@ -644,7 +710,19 @@ RabbitMQ是使用Erlang语言开发的开源消息队列系统，基于AMQP协�
 
   ![](https://gitee.com/xu_zuyun/picgo/raw/master/img/16f7a40302a0db52~tplv-t2oaga2asx-jj-mark 3024 0 0 0 q75.png)
 
+  1. 创建一个名为 `direct_logs` 的 Direct Exchange。
+  2. 生产者发布消息到 `direct_logs` 交换器，并为每条消息指定一个 `routing key`，比如 "error"。
+  3. 队列通过 `binding key` 绑定到交换器。例如，一个队列可能只关心错误日志，因此它使用 "error" 作为 `binding key`。
+  4. 当 `direct_logs` 收到带有 "error" `routing key` 的消息时，它就会将消息路由到绑定了 "error" `binding key` 的队列。
+
+  ```java
+  // 示例代码：在生产者端设置 routing key 发送消息
+  channel.basicPublish("direct_logs", "error", null, message.getBytes());
+  ```
+
 - ii. 扇形交换机，Fanout exchange：⼴播消息，适合于发布/订阅模型
+
+  在扇形交换机的场景中，一个生产者发布的消息会被路由到所有与之绑定的队列，而不管绑定时使用的routing key是什么。这样就实现了消息的广播功能。
 
   ![16f7a4014628ba4c~tplv-t2oaga2asx-jj-mark 3024 0 0 0 q75](https://gitee.com/xu_zuyun/picgo/raw/master/img/16f7a4014628ba4c~tplv-t2oaga2asx-jj-mark%203024%200%200%200%20q75.png)
 
@@ -652,33 +730,41 @@ RabbitMQ是使用Erlang语言开发的开源消息队列系统，基于AMQP协�
 
   ![16f7a4015f452d5e~tplv-t2oaga2asx-jj-mark 3024 0 0 0 q75](https://gitee.com/xu_zuyun/picgo/raw/master/img/16f7a4015f452d5e~tplv-t2oaga2asx-jj-mark%203024%200%200%200%20q75.png)
 
+  - 队列A关注所有来源的错误日志，因此它使用 `*.error` 作为绑定键。
+  - 队列B关注来自认证系统的所有日志，因此它使用 `auth.*` 作为绑定键。
+
+  ```java
+  // 示例代码：在生产者端设置 routing key 为 "error.db.mysql" 发送消息
+  channel.basicPublish("topic_logs", "mysql.error", null, message.getBytes());
+  ```
+
 - iv. ⾸部交换机，Headers exchange：⾸部交换机是忽略routing_key的⼀种路由⽅式。路由器和交换机路由的规则是通过Headers信息来交换的，这个有点像HTTP的Headers。将⼀个交换机声明成⾸部交换机，绑定⼀个队列的时候，定义⼀个Hash的数据结构，消息发送的时候，会携带⼀组hash数据结构的信息，当Hash的内容匹配上的时候，消息就会被写⼊队列。
 
-```
-1. 在RabbitMQ集群中的节点只有两种类型：内存节点/磁盘节点，单节点系统只运行磁盘类型的节点。而在集群中，可以选择配置部分节点为内存节点。
-2. 内存节点将所有的队列，交换器，绑定关系，用户，权限，和vhost的元数据信息保存在内存中。
-3. 磁盘节点将这些信息保存在磁盘中，但是内存节点的性能更高，为了保证集群的高可用性，必须保证集群中有两个以上的磁盘节点，来保证当有一个磁盘节点崩溃了，集群还能对外提供访问服务
-```
+```markdown
+在RabbitMQ集群中的节点只有两种类型：`内存节点/磁盘节点`，单节点系统只运行磁盘类型的节点。而在集群中，可以选择配置部分节点为内存节点。
 
-#### VHost
+内存节点将所有的队列，交换器，绑定关系，用户，权限，和vhost的元数据信息`保存在内存`中。
 
-RabbitMQ 通过虚拟主机来实现逻辑分组和资源隔离，一个虚拟主机就是一个小型的 RabbitMQ 服务器，拥有独立的队列、交换器和绑定关系。用户可以按照不同业务场景建立不同的虚拟主机，虚拟主机之间是完全独立的，你无法将 vhost1 上的交换器与 vhost2 上的队列进行绑定，这可以极大的保证业务之间的隔离性和数据安全。
+磁盘节点将这些信息保存在磁盘中，但是内存节点的性能更高，为了保证集群的高可用性，必须保证集群中有`两个以上的磁盘节点`，来保证当有一个磁盘节点崩溃了，集群还能对外提供访问服务
+```
 
 #### 两种模式
 
-##### 1.主从模式：默认的集群模式、（高性能）
+##### 1.经典队列模式（高性能）
 
-- 内存节点的性能只能体现在资源管理上，比如增加或删除队列（queue），虚拟主机（vrtual hosts），交换机（exchange）等，发送和接受message速度同磁盘节点一样。
-- rabbitmq集群中可以共享user，vhost，exchange等，所有的数据和状态都是必须在所有节点上复制的，在集群模式下只要有任何一个节点能够工作，RabbitMQ集群对外就能提供服务。
-- 消息实体只存在于其中一个节点，A、B两个节点仅有相同的元数据，即队列结构，但队列的元数据仅保存有一份，即创建该队列的rabbitmq节点（A节点），当A节点宕机，你可以去其B节点查看，./rabbitmqctl list_queues发现该队列已经丢失，但声明的exchange还存在。
+- **单个队列存储**：在经典模式下，每个队列通常存储在一个 RabbitMQ 节点上，这个节点被称为“主节点”（Master Node）。所有的生产者和消费者都通过该节点进行消息的发送和接收。
+- **优缺点：**如果存放消息的节点宕机了，就等待该节点恢复；由于不需要同步消息数据所以性能较高。
 
 ```markdown
 ## 消费流程
-当消息进入A节点的Queue中后，consumer从B节点拉取时，RabbitMQ会临时在A、B间进行消息传输，把A中的消息实体取出并经过B发送给consumer，所以consumer应平均连接每一个节点，从中取消息。
+当消息进入A节点的Queue中后，consumer从B节点拉取时，RabbitMQ会临时在A、B间进行消息传输，`把A中的消息实体取出并经过B发送给consumer`，所以consumer应平均连接每一个节点，从中取消息。
 ## 故障处理
-该模式存在一个问题就是当A节点故障后，B节点无法取到A节点中还未消费的消息实体。如果做了队列持久化或消息持久化，那么得等A节点恢复，然后才可被消费，并且在A节点恢复之前其它节点不能再创建A节点已经创建过的持久队列；
+该模式存在一个问题就是当A节点故障后，B节点无法取到A节点中还未消费的消息实体。
+1. 如果做了队列持久化或消息持久化，那么得`等A节点恢复，然后才可被消费`，并且在A节点恢复之前其它节点不能再创建A节点已经创建过的持久队列；
+2. 如果没做队列持久化或消息持久化，重新连接到集群里的其他节点，并重新创建队列。
 
-    这种模式更适合非持久化队列，只有该队列是非持久的，客户端才能重新连接到集群里的其他节点，并重新创建队列。假如该队列是持久化的，那么唯一办法是将故障节点恢复起来。
+
+    （这种模式更适合非持久化队列，只有该队列是非持久的，客户端才能重新连接到集群里的其他节点，并重新创建队列。假如该队列是持久化的，那么唯一办法是将故障节点恢复起来。）
 ```
 
 ##### 2.镜像模式：高可用性
@@ -696,7 +782,23 @@ RabbitMQ 通过虚拟主机来实现逻辑分组和资源隔离，一个虚拟�
 
 4. 当故障的节点恢复后，它会成为新主副本的镜像节点，并重新同步队列的状态。
 
-该模式带来的副作用也很明显，除了降低系统性能外，如果镜像队列数量过多，加之大量的消息进入，集群内部的网络带宽将会被这种同步通讯大大消耗掉。所以在对可靠性要求较高的场合中适用
+**优缺点：**集群内部的网络带宽将会被这种同步通讯大大消耗掉。对可靠性要求较高的场合中适用
+
+#### 推和拉
+
+推模式：当消息到达RabbitMQ时，RabbitMQ会自动地、不断地投递消息给匹配的消费者
+
+```
+优点：实时性好、吞吐量高
+缺点：消费者必须设置一个缓冲区缓存这些消息
+```
+
+拉模式：在消费者需要时才去[消息中间件](https://so.csdn.net/so/search?q=消息中间件&spm=1001.2101.3001.7020)拉取消息，这段网络开销会明显增加消息延迟，降低系统吞吐量
+
+```
+优点：消费速度可控、避免消息积压
+缺点：实时性差、吞吐量低
+```
 
 #### 搭建注意
 
@@ -706,17 +808,22 @@ RabbitMQ 通过虚拟主机来实现逻辑分组和资源隔离，一个虚拟�
 
 #### 问题
 
-##### 如何保证MQ中消息不会丢失？
+⚠如何保证MQ中消息不会丢失？
 
-- RabbitMQ允许将消息标记为持久化，这意味着消息将会被写入磁盘而不是仅保存在内存中。这样，在消息发送到队列之后，即使RabbitMQ服务器发生故障或重启，消息也能够存储在磁盘上，并在恢复后仍然可用。
-- 生产者发生异常没有把消息成功发送给MQ，MQ成功接收到消息之后发生宕机了，消息未被成功，消费消费端要设置签收机制为手动签收，只有当消息最终被处理，才告诉MQ已经消费，此时MQ再去删除这条消息。
-- 消息预取（Message Prefetch）：RabbitMQ允许消费者一次从队列中获取多个消息，并将它们存储在本地缓冲区中。这样可以提高消费者的效率，并减少消费者与RabbitMQ服务器之间的通信次数。
+- RabbitMQ允许将消息`标记为持久化`，这意味着消息将会被写入磁盘而不是仅保存在内存中。这样，在消息发送到队列之后，即使RabbitMQ服务器发生故障或重启，消息也能够存储在磁盘上，并在恢复后仍然可用。
+
+- 生产者发生异常没有把消息成功发送给MQ，MQ成功接收到消息之后发生宕机了，消息未被成功，消费消费端要设置`签收机制`为手动签收，只有当消息最终被处理，才告诉MQ已经消费，此时MQ再去删除这条消息。
+
+  ```
+  消息预取（Message Prefetch）：RabbitMQ允许消费者一次从队列中获取多个消息，并将它们存储在本地缓冲区中。这样可以提高消费者的效率，并减少消费者与RabbitMQ服务器之间的通信次数。
+  ```
 
 ```java
-/*消息持久化方法？
+具体如下：
 1.声明交换机Exchange的时候设置 durable=true；
-2.声明队列Queue的时候设置 durable=true；
-3.发送消息的时候设置消息的 deliveryMode = 2；*/
+2.声明队列Queue的时候设置 durable=true；(意味着即使RabbitMQ服务重启，队列也仍然存在)
+3.发送消息的时候设置消息的 deliveryMode = 2；(表示该消息是持久化的)
+    
 //public TopicExchange(String name, boolean durable, boolean autoDelete)
 return new TopicExchange(EXCHANGE_NAME,true,false);
 //durable：是否将队列持久化 true表示需要持久化 false表示不需要持久化
@@ -725,30 +832,30 @@ return new Queue(QUEUE_NAME, false);
 new MessageProperties() --> DEFAULT_DELIVERY_MODE = MessageDeliveryMode.PERSISTENT --> deliveryMode = 2;
 ```
 
-##### 如何解决消息堆积？
+###### 如何解决消息堆积？
 
 - 启动多个消费者微服务
 - 优化消费者处理消息的能力，提高消费消息的性能
 - 调整RabbitMQ的队列容量
 - 设置过期时间，让一些不是那么重要的消息到达指定时间之后就丢弃
 - 将无法被消费的消息放到死信队列（DLQ）中
+- 自定义消息队列逻辑：最短任务优先、优先级调度...
 
-##### 如何解决消息被重复消费？
+###### 如何解决消息被重复消费？
 
 - 生产者发送消息的时候带上一个全局唯一的id，消费者拿到消息后，先根据这个id去 Redis 里查一下，之前有没消费过，没有消费过就处理，并且写入这个id到 Redis，如果消费过了，则不处理。
-- 基于数据库的唯一键
 - 消费者端幂等性：设计消费者端的处理逻辑具有幂等性。即无论消息被处理多次，最终结果都保持一致。这样，即使消息被重复消费，也不会对最终结果产生影响。
 
-##### RabbitMQ 中 vhost 的作用是什么？
+###### RabbitMQ 中 vhost 的作用是什么？
 
 vhost：每个 RabbitMQ 都能创建很多 vhost，我们称之为虚拟主机，每个虚拟主机其实都是 mini 版的RabbitMQ，它拥有自己的队列，交换器和绑定，拥有自己的权限机制，主要是为了隔离，vhost 不仅消除了为基础架构中的每一层运行一个RabbitMq服务器的需要, 童谣避免为每一层创建不同的集群.
 
-##### RabbitMQ 集群中唯一一个磁盘节点崩溃了会发生什么情况？
+###### RabbitMQ 集群中唯一一个磁盘节点崩溃了会发生什么情况？
 
 如果唯一磁盘的磁盘节点崩溃了，
-唯一磁盘节点崩溃了，集群是可以保持运行的，但你不能更改任何东西。
+唯一磁盘节点崩溃了，集群是**可以保持运行**的，但你**不能更改任何东西**。因为配置更改和其他管理操作需要访问存储在磁盘节点上的持久化数据。
 
-##### RabbitMQ 每个节点是其他节点的完整拷贝吗？为什么？
+###### RabbitMQ 每个节点是其他节点的完整拷贝吗？为什么？
 
 不是，原因有以下两个：
 
@@ -756,7 +863,7 @@ vhost：每个 RabbitMQ 都能创建很多 vhost，我们称之为虚拟主机�
 
 - 性能的考虑：如果每条消息都需要完整拷贝到每一个集群节点，那新增节点并没有提升处理消息的能力，最多是保持和单节点相同的性能甚至是更糟
 
-##### rabbitMQ节点的关闭顺序？
+###### rabbitMQ节点的关闭顺序？
 
 在关闭 RabbitMQ 集群时，应该先关闭从节点，然后再关闭主节点。这是因为从节点的状态是依赖于主节点的，如果先关闭主节点，可能会导致从节点无法正常工作。
 
@@ -878,11 +985,25 @@ func main() {
 ##### 特点
 
 1. **集群**：Zookeeper是一个领导者（Leader），多个跟随者（Follower）组成的集群。
+
 2. **高可用性**：集群中只要有半数以上节点存活，Zookeeper集群就能正常服务。（当发起一个变更请求时，领导者需要从过半的节点（包括自己）得到确认才能认为该操作被提交（这意味着至少写入了过半节点的日志中）
-3. **全局数据一致**：每个Server保存一份相同的数据副本，Client无论连接到哪个Server，数据都是一致的。
-4. **更新请求顺序进行**：来自同一个Client的更新请求按其发送顺序依次执行。
-5. **数据更新原子性**：一次数据更新要么成功，要么失败。
-6. **实时性**：在一定时间范围内，Client能读到最新数据。
+
+3. **一致性**：每个Server保存一份相同的数据副本，Client无论连接到哪个Server，数据都是一致的。
+
+4. **有序性：**
+
+   全局唯一递增的事务ID（zxid）：每个更新请求都被赋予一个全局唯一的递增的事务ID。这个ID反映了所有事务的顺序。
+
+   更新请求顺序进行：来自同一个Client的更新请求按其`发送顺序依次执行`（通过事务id递增实现）。
+
+5. **原子性**：一次数据更新要么成功，要么失败。
+
+6. **可见性**：在一定时间范围内，Client能读到最新数据。
+
+   ```
+   原子性、有序性、可见性
+   ```
+
 7. 从`设计模式`角度来看，zk是一个基于**观察者设计模式**的框架，它负责管理跟存储大家都关心的数据，然后接受观察者的注册，数据发生变化zk会通知在zk上注册的观察者做出反应。
 
 ```markdown
@@ -898,13 +1019,14 @@ Zookeeper 保持主从节点的同步？
 
 - **C（一致性）**：ZooKeeper保证强一致性。它使用原子广播协议（如Zab协议）来确保集群内所有副本在完成变更前都达成一致。
 - **A（可用性）**：在没有网络分区的情况下，ZooKeeper提供高可用性。但是，在出现网络分区时，如果不能与过半节点通信，为了保持一致性，ZooKeeper会牺牲部分可用性——该集群将停止对外提供写服务，直到能够重新建立过半的节点连接。
+- **P（分区容忍性）：**zookeeper牺牲了该特性（一个具有分区容忍性的系统能够继续提供服务，确保系统的可用性和数据的可靠性，即使在部分节点无法相互通信的情况下。）
 
 ##### 原子广播
 
 > 特点：
 >
 > - 所有的写操作（比如创建、删除、更新 znodes）确实需要经过 Leader 节点的协调和管理
-> - 如果请求是发送给 Follower 节点的，那么 Follower 会将请求转发给 Leader 节点
+> - 如果请求是发送给 Follower 节点的，那么 Follower 会将请求**转发给 Leader** 节点
 >
 > 步骤：
 >
@@ -921,7 +1043,7 @@ Zookeeper 保持主从节点的同步？
 >    - 在恢复阶段结束后，Leader 节点就可以开始处理客户端的写请求了。
 >    - 当 Leader 收到一个修改系统状态的请求（例如创建、删除或更新 znode），它会创建一个 "提案" 并将其分发给所有的 Follower 节点。
 > 5. **确认阶段**:
->    - Follower 接收到提案后，将其写入到事务日志，然后向 Leader 发送一个 "ACK"（确认响应）。
+>    - Follower 接收到提案后，将其写入到`事务日志`，然后向 Leader 发送一个 "ACK"（确认响应）。
 >    - 一旦 Leader 收到了来自超过半数节点的 ACKs，它就认为这个提案已经被提交。
 > 6. **提交与应用**:
 >    - Leader 向所有 Follower 发送一个 "commit" 消息，指示他们应用这个提案。
@@ -929,7 +1051,7 @@ Zookeeper 保持主从节点的同步？
 > 7. **客户端响应**:
 >    - 客户端最终从 Leader 或 Follower 节点获得操作结果。
 >
-> ZAB 协议确保了即使在出现网络分区、服务器崩溃等问题的情况下，ZooKeeper 也能够保证数据的一致性和正确的顺序。当系统处于稳定状态，且没有选举发生时，ZAB 协议以高效的方式达成数据的一致性。当需要进行新的领导者选举时，ZAB 也包含了保证集群状态不丢失并快速恢复的机制。
+> ZAB 协议确保了即使在出现`网络分区、服务器崩溃`等问题的情况下，ZooKeeper 也能够保证数据的一致性和正确的顺序。当系统处于稳定状态，且没有选举发生时，ZAB 协议以高效的方式达成数据的一致性。当需要进行新的领导者选举时，ZAB 也包含了保证集群状态不丢失并快速恢复的机制。
 
 ##### ZooKeeper文件系统
 
@@ -948,12 +1070,52 @@ ZFS的根节点是"/"，通过这个节点，用户可以访问整个ZooKeeper�
 
 ##### 监听通知流程
 
-- 在main线程中创建Zookeeper客户端，这时就会创建两个线程，一个负责网络连接通信（connet），一个负责监听（listener）。
+- 在main线程中创建Zookeeper客户端，设置Watcher，这时就会创建两个线程，一个负责网络连接通信（connet），一个负责监听（listener）。
+
 - 通过connect线程将注册的监听事件发送给Zookeeper。
+
 - 在Zookeeper的注册监听器列表中将注册的监听事件添加到列表中。
+
 - Zookeeper监听到有数据或路径变化，就会将这个消息发送给listener线程。
-- listener线程内部调用了process()方法。
-- ZooKeeper  支持watch(观察)的概念。客户端可以在每个znode节点上设置一个观察。如果被观察服务端的znode结点有变更，那么watch就会被触发，这个watch所属的客户端将接收到一个通知包被告知结点已经发生变化，把相应的事件通知给设置过Watcher的Client端。
+
+- listener线程内部调用了`process()`方法。
+
+  
+
+- 在 ZooKeeper 中，watcher 是一次性的：每个 watcher 只会触发一次通知。如果客户端需要持续监听，那么在每次接收并处理完通知之后，都需要重新设置 watcher。
+
+  ```java
+  import org.apache.zookeeper.WatchedEvent;
+  import org.apache.zookeeper.Watcher;
+  import org.apache.zookeeper.ZooKeeper;
+  
+  public class ZooKeeperWatcherExample {
+      private static final String ZK_SERVER_URL = "localhost:2181";
+      
+      public static void main(String[] args) throws Exception {
+          // 创建一个与服务器的连接
+          ZooKeeper zk = new ZooKeeper(ZK_SERVER_URL, 1000, new Watcher() {
+              // 监听器的回调方法
+              public void process(WatchedEvent event) {
+                  System.out.println("已经触发了" + event.getType() + "事件！");
+                  // 可以在这里添加更多逻辑来响应不同类型的事件
+              }
+          });
+  
+          // 假设我们要监听的znode路径为 "/my_service"
+          byte[] data = zk.getData("/my_service", true, null);
+          // 执行其他操作...
+  
+          // 关闭与服务器的连接
+          zk.close();
+      }
+  }
+  ```
+
+#### 不适合做的事
+
+- **1. 大规模数据存储：** ZooKeeper不是为了作为一个数据库设计的，因此不适合存储大量数据。它的节点（znode）有数据大小的限制，默认情况下是1MB。
+- **2. 实时查询或处理：** ZooKeeper的读写请求延迟比一般数据库高，不适合需要快速、实时查询或处理的应用。
 
 #### 应用场景
 
@@ -968,6 +1130,14 @@ ZFS的根节点是"/"，通过这个节点，用户可以访问整个ZooKeeper�
 ##### 2. 分布式锁
 
 主要是避免了羊群效应，临时节点已经预先存在，所有想要获得锁的线程在它下面创建临时顺序编号目录节点，编号最小的获得锁，用完删除，后面的依次排队获取。
+
+优点：
+
+1. 临时顺序节点实现了`公平锁`
+2. 无论连接到哪个 ZooKeeper 服务器节点上，客户端都能读取到最新的数据，确保同一时刻`只有一个客户端持有锁`
+3. ZooKeeper 的 Watcher 机制使得客户端能够订阅节点的变更事件，这样就可以有效地等待锁的释放，而`无需轮询检查`。这减少了网络通信量和响应时间。
+4. 如果客户端崩溃或者由于某种原因失去与服 务器的连接，ZooKeeper 可以`自动清理`该客户端建立的临时节点，从而释放锁。这对于避免死锁情况非常重要。
+5. “大多数”机制 确保 发生分区时不会出现 锁被多个客户端`同时认为自己持有` 的情况
 
 ![img](https://gitee.com/xu_zuyun/picgo/raw/master/img/v2-bbfaf9843eea699c518089ae8c8453ab_1440w.webp)
 
@@ -1221,11 +1391,25 @@ RPC 开始于为所需服务定义明确的接口。这通常使用接口定义�
 
 ### 十四、JWT——轻量级的身份验证和授权机制
 
+Json Web Token
+
 #### 组成
 
-- Header（标头），通常由两部分组成：令牌的类型 和 所用的加密算法，然后将该JSON对象数据进行Base64 URL编码，得到的字符串就是JWT令牌的第一部分。
-- Payload（载荷），有效数据存储区，主要定义自定义字段和内置字段数据。通常会把用户信息和令牌过期时间放在这里，同样也是一个JSON对象，里面的key和value可随意设置，然后经过Base64 URL编码后得到JWT令牌的第二部分
+- Header（标头），通常由两部分组成：令牌的类型 和 所用的加密算法，然后将该JSON对象数据进行`Base64 URL`编码，得到的字符串就是JWT令牌的第一部分。
+
+- Payload（载荷），有效数据存储区，主要定义自定义字段和内置字段数据。通常会把用户信息和令牌过期时间放在这里，同样也是一个JSON对象，里面的key和value可随意设置，然后经过`Base64 URL`编码后得到JWT令牌的第二部分
+
+  ```
+  Audience (aud): Token的目标受众，通常是API或资源服务器的标识符，表明Token是给谁用的。
+  Expiration Time (exp): Token的过期时间。这个时间之后，Token将不再有效。
+  User Identifiers: 可能包括用户名、电子邮件地址、电话号码等用户身份信息，标记用户的身份。
+  User Roles/Permissions: 用户的角色或权限信息，它们定义了用户在应用程序中可以执行哪些操作。
+  Scope (scope): 指示Token允许的操作范围或访问级别，如read, write, admin等。
+  Authentication Method (amr): 用户认证方法，比如密码、生物识别、多因素认证(MFA)等。
+  ```
+
 - Signature（签名）, 使用头部Header定义的加密算法，对前两部分Base64编码拼接的结果进行加密，加密时的秘钥服务私密保存，加密后的结果在通过Base64Url编码得到JWT令牌的第三部分。
+
 - JWT令牌由Header、Payload、Signature三部分组成，每部分字符串中间用. 拼接。JWT令牌的最终格式是这样的： 第一部分.第二部分.第三部分
 
 ![img](https://gitee.com/xu_zuyun/picgo/raw/master/img/69d0be675f494f11a4a6570e1ad3c208~tplv-k3u1fbpfcp-jj-mark:3024:0:0:0:q75.awebp)
@@ -1291,8 +1475,7 @@ eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3MDE0NDI0OTYsInVzZXJJZCI6MTAwLCJ
 服务器收到token后，取出前2部分使用私钥签名得到结果，与token第三部分比较，看是否相同
 
 - SignatureVerificationException        签名不一致异常
-- TokenExpiredException                 令牌过期异常
-- AlgorithmMismatchException            算法不匹配异常
-- InvalidClaimException                 失效的payload异常
+- TokenExpiredException                 令牌过期异常（在payload里面设置）
+- InvalidClaimException                 失效的payload异常（编码错误等）
 
 缺点：不支持注销、Token过期机制存在缺陷、Token数量过多可能导致性能问题
